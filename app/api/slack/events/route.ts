@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { classifyMessage } from "@/lib/classify";
-import { createTask, logToInbox } from "@/lib/clickup";
+import { classifyMessage, classifyWithForcedCategory } from "@/lib/classify";
+import { createTask, logToInbox, updateInboxLogEntry } from "@/lib/clickup";
 import {
   postConfirmation,
   postNeedsReview,
@@ -12,6 +12,13 @@ const CONFIDENCE_THRESHOLD = 0.6;
 
 // Simple dedup: track recently processed message timestamps
 const processed = new Set<string>();
+
+const LIST_IDS: Record<string, string> = {
+  people: process.env.CLICKUP_LIST_PEOPLE!,
+  projects: process.env.CLICKUP_LIST_PROJECTS!,
+  ideas: process.env.CLICKUP_LIST_IDEAS!,
+  admin: process.env.CLICKUP_LIST_ADMIN!,
+};
 
 interface SlackEvent {
   type: string;
@@ -26,6 +33,88 @@ interface SlackEvent {
     subtype?: string;
   };
   challenge?: string;
+}
+
+async function processFixCommand(
+  channel: string,
+  threadTs: string,
+  newCategory: string
+) {
+  const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+
+  // Validate category
+  const newListId = LIST_IDS[newCategory];
+  if (!newListId) {
+    await slack.chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: `❓ Unknown category: "${newCategory}". Valid options: people, projects, ideas, admin.`,
+    });
+    return;
+  }
+
+  try {
+    // Get the thread to find the original message
+    const replies = await slack.conversations.replies({
+      channel,
+      ts: threadTs,
+    });
+
+    if (!replies.messages || replies.messages.length === 0) {
+      await slack.chat.postMessage({
+        channel,
+        thread_ts: threadTs,
+        text: "Couldn't find the original message.",
+      });
+      return;
+    }
+
+    // The first message in the thread is the original capture
+    const originalMessage = replies.messages[0];
+    const originalText = originalMessage.text;
+
+    if (!originalText) {
+      await slack.chat.postMessage({
+        channel,
+        thread_ts: threadTs,
+        text: "Couldn't find the original text to reclassify.",
+      });
+      return;
+    }
+
+    // Re-classify with forced category
+    const classification = await classifyWithForcedCategory(
+      originalText,
+      newCategory.toUpperCase() as "PEOPLE" | "PROJECTS" | "IDEAS" | "ADMIN"
+    );
+
+    // Create new task in the correct list
+    const task = await createTask(classification);
+
+    // Update the inbox log entry
+    await updateInboxLogEntry(threadTs, {
+      filedTo: classification.category,
+      destinationName: task.name,
+      destinationUrl: task.url,
+      status: "Fixed",
+    });
+
+    // Confirm the fix
+    await slack.chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: `✅ Fixed! Re-filed as *${classification.category}*: <${task.url}|${task.name}>`,
+    });
+  } catch (error) {
+    console.error("Error processing fix command:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    await slack.chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: `❌ Fix failed: ${errorMessage}`,
+    });
+  }
 }
 
 async function processMessage(channel: string, text: string, ts: string) {
@@ -126,8 +215,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Ignore threaded replies (handled by fix route)
+    // Handle threaded replies - check if it's a fix command
     if (msg.thread_ts && msg.thread_ts !== msg.ts) {
+      const fixMatch = msg.text.match(/^fix:\s*(\w+)/i);
+      if (fixMatch) {
+        // Process fix command
+        await processFixCommand(
+          msg.channel,
+          msg.thread_ts,
+          fixMatch[1].toLowerCase()
+        );
+      }
+      // Ignore other threaded replies
       return NextResponse.json({ ok: true });
     }
 

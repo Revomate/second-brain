@@ -40,38 +40,121 @@ Return JSON only, no other text:
 Be decisive. If it mentions a person by name with context, it's PEOPLE. If it has a clear action item or deliverable, it's PROJECTS. If it's speculative or "what if", it's IDEAS. If it's a chore/errand/appointment, it's ADMIN.`;
 }
 
-export const DAILY_DIGEST_PROMPT = `You are creating a daily digest for a Second Brain system. Given the active items below, create a brief, actionable morning digest.
+export function getForcedClassificationPrompt(
+  text: string,
+  category: "PEOPLE" | "PROJECTS" | "IDEAS" | "ADMIN"
+): string {
+  const today = new Date().toISOString().split("T")[0];
 
-Format:
-**Top 3 for today:**
-1. [most important thing]
-2. [second priority]
-3. [third priority]
+  const schemas: Record<string, string> = {
+    PEOPLE: `{"name": "Person's Name", "context": "How you know them or their role", "follow_ups": ["action item 1", "action item 2"]}`,
+    PROJECTS: `{"title": "Project Name", "next_action": "Specific next action to take", "notes": "Additional context"}`,
+    IDEAS: `{"title": "Idea Title", "one_liner": "Core insight in one sentence", "notes": "Elaboration if provided"}`,
+    ADMIN: `{"title": "Task name", "due_date": "${today} or null if not specified", "notes": "Additional context"}`,
+  };
 
-**People to reach out to:**
-- [name]: [reason]
+  return `Extract structured data from this text for a ${category} record.
 
-**Don't forget:**
-- [any admin items due soon]
+TEXT:
+${text}
 
-Keep it under 150 words. Be direct. No fluff.`;
+CATEGORY: ${category}
 
-export const WEEKLY_REVIEW_PROMPT = `You are creating a weekly review for a Second Brain system. Summarize the week's captures and suggest focus areas.
+Today's date is ${today}. Use this for any relative date references.
 
-Format:
-**This week:** [X] captures ([breakdown by category])
+Return ONLY JSON matching this structure (no markdown, no explanation):
+${schemas[category]}`;
+}
 
-**Progress:**
-- [completed or moved forward]
+export function getDailyDigestPrompt(context: string): string {
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
-**Open loops:**
-- [things that need attention]
+  return `You are a personal productivity assistant. Generate a concise daily digest based on the following data.
 
-**Patterns I notice:**
-- [any themes in the captures]
+${context}
 
-**Suggested focus for next week:**
-1. [priority]
-2. [priority]
+TODAY'S DATE: ${today}
 
-Keep it under 250 words. Be honest about what's stalling.`;
+INSTRUCTIONS:
+Create a digest with EXACTLY this format. Keep it under 150 words total.
+
+---
+
+☀️ **Good morning!**
+
+**🎯 Top 3 Actions Today:**
+1. [Most important/urgent action from projects or admin]
+2. [Second priority]
+3. [Third priority]
+
+**👥 People to Connect With:**
+- [Person name]: [Brief follow-up reminder]
+
+**⚠️ Watch Out For:**
+[One thing that might be stuck, overdue, or getting neglected]
+
+**💪 One Small Win to Notice:**
+[Something positive or progress made, or encouraging thought]
+
+---
+
+RULES:
+- Be specific and actionable, not motivational
+- Prioritize overdue items and concrete next actions
+- If there's nothing in a section, omit it entirely
+- Keep language direct and practical
+- Don't add explanations or commentary outside the format`;
+}
+
+export function getWeeklyReviewPrompt(context: string, totalCaptures: number): string {
+  return `You are a personal productivity assistant conducting a weekly review. Analyze the following data and generate an insightful summary.
+
+${context}
+
+TOTAL CAPTURES THIS WEEK: ${totalCaptures}
+
+INSTRUCTIONS:
+Create a weekly review with EXACTLY this format. Keep it under 250 words total.
+
+---
+
+📅 **Week in Review**
+
+**📊 Quick Stats:**
+- Items captured: [number]
+- Breakdown: [x people, y projects, z ideas, w admin]
+
+**🎯 What Moved Forward:**
+- [Project or area that made progress]
+- [Another win or completion]
+
+**🔴 Open Loops (needs attention):**
+1. [Something blocked, stalled, or waiting too long]
+2. [Another concern]
+
+**💡 Patterns I Notice:**
+[One observation about themes, recurring topics, or where energy is going]
+
+**📌 Suggested Focus for Next Week:**
+1. [Specific action for highest priority item]
+2. [Second priority]
+3. [Third priority]
+
+**🔧 Items Needing Review:**
+[List any items still marked "Needs Review" or flag if none]
+
+---
+
+RULES:
+- Be analytical, not motivational
+- Call out projects that haven't had action in over a week
+- Note if capture volume was unusually high or low
+- Suggest concrete next actions, not vague intentions
+- If something looks stuck, say so directly
+- Keep language concise and actionable`;
+}
