@@ -108,6 +108,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     } catch (error) {
       console.error("Error processing message:", error);
+
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+      try {
+        const { WebClient } = await import("@slack/web-api");
+        const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+        await slack.chat.postMessage({
+          channel: msg.channel,
+          thread_ts: msg.ts,
+          text: `❌ Error processing this:\n\`${errorMessage}\``,
+        });
+      } catch (slackError) {
+        console.error("Failed to send error to Slack:", slackError);
+      }
+
       return NextResponse.json(
         { error: "Processing failed" },
         { status: 500 }

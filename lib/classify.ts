@@ -32,10 +32,17 @@ export async function classifyMessage(text: string): Promise<Classification> {
     throw new Error("Unexpected response type");
   }
 
+  console.log("Claude raw response:", content.text);
+
   try {
-    return JSON.parse(content.text) as Classification;
-  } catch {
-    // If parsing fails, return low confidence
+    // Strip markdown code fences if present
+    let jsonText = content.text.trim();
+    if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+    return JSON.parse(jsonText) as Classification;
+  } catch (parseError) {
+    console.error("JSON parse failed. Raw text:", content.text, "Error:", parseError);
     return {
       category: "IDEAS",
       confidence: 0.3,
