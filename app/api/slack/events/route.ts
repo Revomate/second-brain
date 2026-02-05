@@ -149,11 +149,9 @@ export async function POST(request: NextRequest) {
       entries.slice(0, entries.length - 100).forEach((ts) => processed.delete(ts));
     }
 
-    // Return 200 immediately, process in background
-    // This prevents Slack's 3-second timeout retries
-    processMessage(msg.channel, msg.text, msg.ts).catch((err) =>
-      console.error("Background processing failed:", err)
-    );
+    // Process the message (awaited so Vercel doesn't kill it)
+    // Dedup above handles Slack's retry attempts
+    await processMessage(msg.channel, msg.text, msg.ts);
 
     return NextResponse.json({ ok: true });
   }
