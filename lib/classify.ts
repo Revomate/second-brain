@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
-  CLASSIFICATION_PROMPT,
+  getClassificationPrompt,
   DAILY_DIGEST_PROMPT,
   WEEKLY_REVIEW_PROMPT,
 } from "./prompts";
@@ -22,7 +22,7 @@ export async function classifyMessage(text: string): Promise<Classification> {
     messages: [
       {
         role: "user",
-        content: `${CLASSIFICATION_PROMPT}\n\nClassify this:\n"${text}"`,
+        content: `${getClassificationPrompt()}\n\nClassify this:\n"${text}"`,
       },
     ],
   });

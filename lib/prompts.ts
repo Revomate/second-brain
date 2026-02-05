@@ -1,4 +1,8 @@
-export const CLASSIFICATION_PROMPT = `You are a Second Brain classifier. Analyze the user's captured thought and classify it.
+export function getClassificationPrompt(): string {
+  const today = new Date().toISOString().split("T")[0];
+  return `You are a Second Brain classifier. Analyze the user's captured thought and classify it.
+
+Today's date is ${today}. Use this for any relative date references (e.g. "by March 15" means ${today.slice(0, 4)}-03-15).
 
 Categories:
 - PEOPLE: Notes about people, relationships, follow-ups with individuals
@@ -28,12 +32,13 @@ Return JSON only, no other text:
     
     // For ADMIN:
     "title": "task title",
-    "due_date": "if mentioned, ISO format or null",
+    "due_date": "if mentioned, ISO format YYYY-MM-DD or null",
     "notes": "additional details"
   }
 }
 
 Be decisive. If it mentions a person by name with context, it's PEOPLE. If it has a clear action item or deliverable, it's PROJECTS. If it's speculative or "what if", it's IDEAS. If it's a chore/errand/appointment, it's ADMIN.`;
+}
 
 export const DAILY_DIGEST_PROMPT = `You are creating a daily digest for a Second Brain system. Given the active items below, create a brief, actionable morning digest.
 
