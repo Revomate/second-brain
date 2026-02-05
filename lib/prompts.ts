@@ -40,6 +40,67 @@ Return JSON only, no other text:
 Be decisive. If it mentions a person by name with context, it's PEOPLE. If it has a clear action item or deliverable, it's PROJECTS. If it's speculative or "what if", it's IDEAS. If it's a chore/errand/appointment, it's ADMIN.`;
 }
 
+export function getClassificationPromptWithProjects(
+  existingProjects: { id: string; name: string }[]
+): string {
+  const today = new Date().toISOString().split("T")[0];
+  const projectList = existingProjects
+    .map((p) => `  - ID: "${p.id}" | Name: "${p.name}"`)
+    .join("\n");
+
+  return `You are a Second Brain classifier. Analyze the user's captured thought and classify it.
+
+Today's date is ${today}. Use this for any relative date references (e.g. "by March 15" means ${today.slice(0, 4)}-03-15).
+
+Categories:
+- PEOPLE: Notes about people, relationships, follow-ups with individuals
+- PROJECTS: Active work items, tasks with next actions
+- IDEAS: Concepts, future possibilities, things to explore
+- ADMIN: Errands, appointments, logistics, bills, chores
+
+EXISTING PROJECTS:
+${projectList}
+
+If the captured thought is about a task or update related to one of the existing projects above, classify it as PROJECTS and include the "existing_project_id" field with that project's ID. The task will be created as a subtask under that project.
+
+If it's a new project that doesn't match any existing ones, classify as PROJECTS without existing_project_id.
+
+Return JSON only, no other text:
+{
+  "category": "PEOPLE" | "PROJECTS" | "IDEAS" | "ADMIN",
+  "confidence": 0.0-1.0,
+  "existing_project_id": "project_id_if_matches_existing_or_null",
+  "fields": {
+    // For PEOPLE:
+    "name": "person's name",
+    "context": "how you know them / context",
+    "follow_ups": ["action items"]
+
+    // For PROJECTS (new or subtask):
+    "title": "task/subtask title",
+    "next_action": "specific next step",
+    "notes": "additional context"
+
+    // For IDEAS:
+    "title": "idea title",
+    "one_liner": "brief description",
+    "notes": "additional thoughts"
+
+    // For ADMIN:
+    "title": "task title",
+    "due_date": "if mentioned, ISO format YYYY-MM-DD or null",
+    "notes": "additional details"
+  }
+}
+
+Be decisive. If it mentions a person by name with context, it's PEOPLE. If it has a clear action item or deliverable, it's PROJECTS. If it's speculative or "what if", it's IDEAS. If it's a chore/errand/appointment, it's ADMIN.
+
+When matching to existing projects, look for:
+- Direct mentions of the project name
+- Related keywords or context that clearly ties to a project
+- Only match if you're confident (>70%) it relates to that project`;
+}
+
 export function getForcedClassificationPrompt(
   text: string,
   category: "PEOPLE" | "PROJECTS" | "IDEAS" | "ADMIN"

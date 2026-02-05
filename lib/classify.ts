@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   getClassificationPrompt,
+  getClassificationPromptWithProjects,
   getForcedClassificationPrompt,
   getDailyDigestPrompt,
   getWeeklyReviewPrompt,
@@ -10,20 +11,34 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+export interface ExistingProject {
+  id: string;
+  name: string;
+}
+
 export interface Classification {
   category: "PEOPLE" | "PROJECTS" | "IDEAS" | "ADMIN";
   confidence: number;
   fields: Record<string, unknown>;
+  existingProjectId?: string; // If this relates to an existing project
 }
 
-export async function classifyMessage(text: string): Promise<Classification> {
+export async function classifyMessage(
+  text: string,
+  existingProjects?: ExistingProject[]
+): Promise<Classification> {
+  const prompt =
+    existingProjects && existingProjects.length > 0
+      ? getClassificationPromptWithProjects(existingProjects)
+      : getClassificationPrompt();
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1024,
     messages: [
       {
         role: "user",
-        content: `${getClassificationPrompt()}\n\nClassify this:\n"${text}"`,
+        content: `${prompt}\n\nClassify this:\n"${text}"`,
       },
     ],
   });
@@ -41,7 +56,13 @@ export async function classifyMessage(text: string): Promise<Classification> {
     if (jsonText.startsWith("```")) {
       jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
     }
-    return JSON.parse(jsonText) as Classification;
+    const parsed = JSON.parse(jsonText);
+    return {
+      category: parsed.category,
+      confidence: parsed.confidence,
+      fields: parsed.fields,
+      existingProjectId: parsed.existing_project_id || undefined,
+    };
   } catch (parseError) {
     console.error("JSON parse failed. Raw text:", content.text, "Error:", parseError);
     return {

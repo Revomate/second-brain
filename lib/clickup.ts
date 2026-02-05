@@ -20,6 +20,39 @@ export interface Task {
   url: string;
 }
 
+export interface ExistingProject {
+  id: string;
+  name: string;
+}
+
+/**
+ * Fetch all active projects for classification matching
+ */
+export async function getExistingProjects(): Promise<ExistingProject[]> {
+  const listId = LIST_IDS.PROJECTS;
+
+  const response = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    console.error("Failed to fetch existing projects:", await response.text());
+    return []; // Return empty array on error - classification will still work without matching
+  }
+
+  const data = await response.json();
+  return (data.tasks as ClickUpTask[])
+    .filter((t) => {
+      // Only include active/in-progress projects, not completed ones
+      const status = t.status?.status?.toLowerCase() || "";
+      return !["done", "complete", "closed"].includes(status);
+    })
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+    }));
+}
+
 export async function createTask(classification: Classification): Promise<Task> {
   const listId = LIST_IDS[classification.category];
   const fields = classification.fields;
@@ -65,6 +98,11 @@ export async function createTask(classification: Classification): Promise<Task> 
 
   if (classification.category === "ADMIN" && fields.due_date) {
     body.due_date = new Date(fields.due_date as string).getTime();
+  }
+
+  // If this is a subtask of an existing project, add the parent
+  if (classification.existingProjectId) {
+    body.parent = classification.existingProjectId;
   }
 
   const response = await fetch(`${CLICKUP_API}/list/${listId}/task`, {

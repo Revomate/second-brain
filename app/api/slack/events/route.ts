@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { classifyMessage, classifyWithForcedCategory } from "@/lib/classify";
-import { createTask, logToInbox, updateInboxLogEntry } from "@/lib/clickup";
+import { createTask, logToInbox, updateInboxLogEntry, getExistingProjects } from "@/lib/clickup";
 import {
   postConfirmation,
   postNeedsReview,
@@ -121,7 +121,10 @@ async function processMessage(channel: string, text: string, ts: string) {
   const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
   try {
-    const classification = await classifyMessage(text);
+    // Fetch existing projects for smart matching
+    const existingProjects = await getExistingProjects();
+
+    const classification = await classifyMessage(text, existingProjects);
 
     if (classification.confidence < CONFIDENCE_THRESHOLD) {
       await postNeedsReview(channel, ts, text);
@@ -140,9 +143,17 @@ async function processMessage(channel: string, text: string, ts: string) {
 
     const task = await createTask(classification);
 
+    // Determine if this was filed as a subtask
+    const isSubtask = !!classification.existingProjectId;
+    const parentProject = isSubtask
+      ? existingProjects.find((p) => p.id === classification.existingProjectId)
+      : null;
+
     await logToInbox({
       originalText: text,
-      filedTo: classification.category,
+      filedTo: isSubtask
+        ? `${classification.category} (subtask of ${parentProject?.name || "project"})`
+        : classification.category,
       destinationName: task.name,
       destinationUrl: task.url,
       confidence: classification.confidence,
@@ -155,6 +166,8 @@ async function processMessage(channel: string, text: string, ts: string) {
       name: task.name,
       url: task.url,
       confidence: classification.confidence,
+      isSubtask,
+      parentProjectName: parentProject?.name,
     });
   } catch (error) {
     console.error("Error processing message:", error);

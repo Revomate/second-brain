@@ -11,12 +11,18 @@ export async function postConfirmation(
     name: string;
     url: string;
     confidence: number;
+    isSubtask?: boolean;
+    parentProjectName?: string;
   }
 ): Promise<void> {
   const confidenceEmoji =
     data.confidence >= 0.8 ? "✅" : data.confidence >= 0.6 ? "🟡" : "⚠️";
 
-  const message = `${confidenceEmoji} Filed as *${data.category}*: <${data.url}|${data.name}>
+  const filedAs = data.isSubtask && data.parentProjectName
+    ? `*${data.category}* (subtask of _${data.parentProjectName}_)`
+    : `*${data.category}*`;
+
+  const message = `${confidenceEmoji} Filed as ${filedAs}: <${data.url}|${data.name}>
 Confidence: ${(data.confidence * 100).toFixed(0)}%
 
 _Reply \`fix: [category]\` if I got it wrong._`;
