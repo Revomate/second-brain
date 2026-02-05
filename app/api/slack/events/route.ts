@@ -219,6 +219,13 @@ export async function POST(request: NextRequest) {
     if (msg.thread_ts && msg.thread_ts !== msg.ts) {
       const fixMatch = msg.text.match(/^fix:\s*(\w+)/i);
       if (fixMatch) {
+        // Dedup fix commands using the reply's ts
+        if (processed.has(msg.ts)) {
+          console.log("Skipping duplicate fix command for ts:", msg.ts);
+          return NextResponse.json({ ok: true });
+        }
+        processed.add(msg.ts);
+
         // Process fix command
         await processFixCommand(
           msg.channel,
